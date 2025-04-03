@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+# Dicionário de nomes bonitos
 nomes_bonitos = {
     "BANQUETA": "Banqueta",
     "CAIXA CABIDEIRO": "Caixa para cabideiro",
@@ -29,31 +30,28 @@ nomes_bonitos = {
     "TABUA DE PASSAR": "Tábua de passar"
 }
 
-# Caminho do seu CSV
 CSV_PATH = 'itens_pro1.csv'
 
-# Carrega os dados no session_state, se ainda não existirem
+# Inicializa session_state
 if 'df_raw' not in st.session_state:
     st.session_state.df_raw = pd.read_csv(CSV_PATH)
 
 if 'checked_itens' not in st.session_state:
     st.session_state.checked_itens = set()
 
-# 👉 Abas principais
-aba1, aba2 = st.tabs(["✅ Checklist de Itens", "📝 Editar Itens"])
+# Abas principais
+aba1, aba2, aba3 = st.tabs(["✅ Checklist", "🛠 Adicionar/Editar/Remover", "📊 Visualização Final"])
 
 with aba1:
     st.title("📦 Checklist da Mudança")
-    st.markdown("Marque os itens que **já foram armazenados com sucesso**.")
 
     for i, row in st.session_state.df_raw.iterrows():
         nome_caps = row['objeto']
-        
         if pd.isna(nome_caps) or not isinstance(nome_caps, str):
             nome_bonito = "⚠️ Nome inválido"
         else:
             nome_bonito = nomes_bonitos.get(nome_caps, nome_caps.title())
-        
+
         key = f"check_{i}_{nome_caps}"
 
         checked = st.checkbox(
@@ -75,18 +73,64 @@ with aba1:
         st.rerun()
 
 with aba2:
-    st.title("📝 Editar Itens da Mudança")
-    st.markdown("Edite abaixo os campos. As mudanças são salvas automaticamente.")
+    st.title("🛠 Adicionar, Editar ou Remover Itens")
 
-    edited_df = st.data_editor(
-        st.session_state.df_raw,
-        use_container_width=True,
-        num_rows="dynamic",
-        key="editor_df"
-    )
+    opcoes = ["Adicionar", "Editar", "Remover"]
+    operacao = st.selectbox("O que você deseja fazer?", opcoes)
 
-    # Salva somente se houve alterações
-    if not edited_df.equals(st.session_state.df_raw):
-        st.session_state.df_raw = edited_df
-        st.session_state.df_raw.to_csv(CSV_PATH, index=False)
-        st.success("💾 Alterações salvas com sucesso!")
+    todos_itens = list(st.session_state.df_raw['objeto'].dropna().unique())
+
+    if operacao == "Adicionar":
+        novo_nome = st.text_input("Digite o nome do novo item (em letras maiúsculas):", "")
+        nova_qtd = st.number_input("Quantidade", min_value=1, value=1, step=1)
+        nova_desc = st.text_input("Descrição (opcional):", "")
+        valor_str = st.text_input("Valor (opcional) (somente números inteiros):")
+        novo_valor = int(valor_str) if valor_str.strip().isdigit() else None
+
+        if st.button("Salvar Novo Item"):
+            novo_registro = pd.DataFrame([{
+                'objeto': novo_nome,
+                'quantidade': nova_qtd,
+                'descricao': nova_desc,
+                'valor': novo_valor
+            }])
+            st.session_state.df_raw = pd.concat([st.session_state.df_raw, novo_registro], ignore_index=True)
+            st.session_state.df_raw.to_csv(CSV_PATH, index=False)
+            st.success("Item adicionado com sucesso!")
+
+    elif operacao == "Editar":
+        item_selecionado = st.selectbox("Selecione o item que deseja editar", todos_itens)
+
+        # Pega os valores atuais para preencher os campos automaticamente
+        item_data = st.session_state.df_raw[st.session_state.df_raw['objeto'] == item_selecionado]
+        quantidade_atual = int(item_data['quantidade'].values[0]) if not item_data.empty else 1
+        descricao_atual = item_data['descricao'].values[0] if not item_data.empty else ""
+        valor_atual = item_data['valor'].values[0] if not item_data.empty else None
+        valor_str = str(int(valor_atual)) if pd.notna(valor_atual) else ""
+
+        nova_qtd = st.number_input("Nova quantidade", min_value=1, value=quantidade_atual, step=1)
+        
+        nova_desc_input = st.text_input("Nova descrição (opcional):", descricao_atual or "")
+        nova_desc = nova_desc_input.strip() or None
+        
+        novo_valor_str = st.text_input("Novo valor (opcional) (somente números inteiros):", valor_str)
+        novo_valor = int(novo_valor_str) if novo_valor_str.strip().isdigit() else None
+
+        if st.button("Salvar Alteração"):
+            idx = st.session_state.df_raw[st.session_state.df_raw['objeto'] == item_selecionado].index
+            if len(idx) > 0:
+                st.session_state.df_raw.loc[idx, ['quantidade', 'descricao', 'valor']] = [nova_qtd, nova_desc, novo_valor]
+                st.session_state.df_raw.to_csv(CSV_PATH, index=False)
+                st.success("Item atualizado com sucesso!")
+
+    elif operacao == "Remover":
+        item_selecionado = st.selectbox("Selecione o item que deseja remover", todos_itens)
+
+        if st.button("Remover Item"):
+            st.session_state.df_raw = st.session_state.df_raw[st.session_state.df_raw['objeto'] != item_selecionado]
+            st.session_state.df_raw.to_csv(CSV_PATH, index=False)
+            st.success("Item removido com sucesso!")
+
+with aba3:
+    st.title("📊 Visualização Final")
+    st.dataframe(st.session_state.df_raw, use_container_width=True)
