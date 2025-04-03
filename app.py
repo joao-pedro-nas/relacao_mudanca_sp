@@ -30,7 +30,7 @@ nomes_bonitos = {
 }
 
 # Caminho do seu CSV
-CSV_PATH = '/Users/jp230/Documents/mudanca_sp_relacao/itens_pro1.csv'
+CSV_PATH = 'itens_pro1.csv'
 
 # Carrega os dados no session_state, se ainda não existirem
 if 'df_raw' not in st.session_state:
